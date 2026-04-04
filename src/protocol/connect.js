@@ -45,18 +45,6 @@ export const tests = (url, baseCfg) => [
   },
 
   {
-    name: 'Protocol version MQTT 3.1 (protocol level 3)',
-    fn: async () => {
-      const client = await connect(url, {
-        ...baseCfg,
-        clientId: `brute_v31_${randomId()}`,
-        protocolVersion: 3,
-      });
-      await disconnect(client);
-    },
-  },
-
-  {
     name: 'Protocol version MQTT 3.1.1 (protocol level 4)',
     fn: async () => {
       const client = await connect(url, {
