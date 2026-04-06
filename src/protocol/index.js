@@ -80,7 +80,59 @@ export const runProtocolTests = async (url, baseCfg = {}, opts = {}) => {
       if (verbose) {
         info(`    → ${spec.name}`);
       }
-      const result = await runTest(spec.name, spec.fn);
+      const result = await runTest(spec.name, async () => {
+        let rejectOnUnhandled;
+        let settled = false;
+
+        const normalizeReason = (reason) => {
+          if (reason instanceof Error) {
+            return reason.message;
+          }
+          if (typeof reason === 'string') {
+            return reason;
+          }
+          try {
+            return JSON.stringify(reason);
+          } catch {
+            return String(reason);
+          }
+        };
+
+        const failCurrentTest = (kind, reason) => {
+          if (settled || !rejectOnUnhandled) {
+            return;
+          }
+          rejectOnUnhandled(
+            new Error(
+              `${kind} in "${mod.name}" / "${spec.name}": ${normalizeReason(reason)}`
+            )
+          );
+        };
+
+        const onUnhandledRejection = (reason) => {
+          failCurrentTest('Unhandled rejection', reason);
+        };
+
+        const onUncaughtException = (err) => {
+          failCurrentTest('Uncaught exception', err);
+        };
+
+        process.on('unhandledRejection', onUnhandledRejection);
+        process.on('uncaughtException', onUncaughtException);
+        try {
+          await Promise.race([
+            spec.fn(),
+            new Promise((_, reject) => {
+              rejectOnUnhandled = reject;
+            }),
+          ]);
+        } finally {
+          settled = true;
+          rejectOnUnhandled = null;
+          process.removeListener('unhandledRejection', onUnhandledRejection);
+          process.removeListener('uncaughtException', onUncaughtException);
+        }
+      });
       // Tag result with module name for grouped display
       result.group = mod.name;
       allResults.push(result);
