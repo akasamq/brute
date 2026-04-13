@@ -89,6 +89,9 @@ class TestRunner:
         self.module.port = self.port
         if hasattr(self.module, 'setData'):
             self.module.setData()
+            # Set topic_prefix for shared_subscriptions test (needed by V5)
+            if not hasattr(self.module, 'topic_prefix') or self.module.topic_prefix is None:
+                self.module.topic_prefix = "client_test5/"
 
         # Call setUpClass properly (it's a classmethod, needs the class as argument)
         self.module.Test.setUpClass()
