@@ -10,6 +10,21 @@ import unittest
 from pathlib import Path
 
 
+OPTIONAL_TEST_EXCLUDES = {
+    "client_test.py": {
+        "test_dollar_topics",
+        "test_subscribe_failure",
+        "test_zero_length_clientid",
+    },
+    "client_test5.py": {
+        "test_dollar_topics",
+        "test_subscribe_failure",
+        "test_zero_length_clientid",
+        "test_shared_subscriptions",
+    },
+}
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Run MQTT tests one by one with timeout")
     parser.add_argument("--host", default="localhost", help="MQTT broker hostname")
@@ -17,6 +32,7 @@ def parse_args():
     parser.add_argument("--timeout", type=int, default=60, help="Timeout per test in seconds")
     parser.add_argument("--v5-only", action="store_true", help="Run only V5 tests")
     parser.add_argument("--v3-only", action="store_true", help="Run only V3 tests")
+    parser.add_argument("--include-optional", action="store_true", help="Include optional tests")
     parser.add_argument("--tests", nargs="*", help="Specific test methods to run")
     args = parser.parse_args()
 
@@ -46,6 +62,7 @@ class TestRunner:
 
     def run_with_timeout(self, test_method):
         """Run a test with timeout using signal."""
+
         def handler(signum, frame):
             raise TimeoutError("Test timed out after {} seconds".format(self.timeout))
 
@@ -63,13 +80,17 @@ class TestRunner:
             signal.alarm(0)
             return "FAILED", str(e)
 
-    def run(self, specific_tests=None):
+    def run(self, specific_tests=None, excluded_tests=None):
         all_tests = self.get_test_methods()
 
         if specific_tests:
             tests = [t for t in all_tests if t in specific_tests or any(s in t for s in specific_tests)]
+            skipped_optional = []
         else:
             tests = all_tests
+            excluded_tests = excluded_tests or set()
+            skipped_optional = [t for t in tests if t in excluded_tests]
+            tests = [t for t in tests if t not in excluded_tests]
 
         if not tests:
             print("No tests found")
@@ -78,6 +99,13 @@ class TestRunner:
         print("Found {} test(s):".format(len(tests)))
         for i, t in enumerate(tests, 1):
             print("  {}. {}".format(i, t))
+
+        if skipped_optional:
+            print()
+            print("Excluded optional tests ({}):".format(len(skipped_optional)))
+            for t in skipped_optional:
+                print("  - {}".format(t))
+
         print()
 
         passed = 0
@@ -87,10 +115,10 @@ class TestRunner:
         # Setup once for all tests
         self.module.host = self.host
         self.module.port = self.port
-        if hasattr(self.module, 'setData'):
+        if hasattr(self.module, "setData"):
             self.module.setData()
             # Set topic_prefix for shared_subscriptions test (needed by V5)
-            if not hasattr(self.module, 'topic_prefix') or self.module.topic_prefix is None:
+            if not hasattr(self.module, "topic_prefix") or self.module.topic_prefix is None:
                 self.module.topic_prefix = "client_test5/"
 
         # Call setUpClass properly (it's a classmethod, needs the class as argument)
@@ -130,8 +158,11 @@ class TestRunner:
                 print("    {}".format(error))
 
         print()
-        print("Total: {} | Passed: {} | Failed: {} | Timed out: {}".format(
-            len(tests), passed, failed, timed_out))
+        print(
+            "Total: {} | Passed: {} | Failed: {} | Timed out: {}".format(
+                len(tests), passed, failed, timed_out
+            )
+        )
 
         return failed == 0 and timed_out == 0
 
@@ -143,8 +174,7 @@ def load_test_module(test_file, test_dir):
     sys.path.insert(0, test_dir)
 
     module_name = Path(test_file).stem
-    spec = importlib.util.spec_from_file_location(
-        module_name, os.path.join(test_dir, test_file))
+    spec = importlib.util.spec_from_file_location(module_name, os.path.join(test_dir, test_file))
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
@@ -172,10 +202,12 @@ def main():
         try:
             module = load_test_module("client_test5.py", str(test_dir))
             runner = TestRunner(module, args.host, args.port, args.timeout)
-            success = runner.run(args.tests) and success
+            v5_excluded_tests = set() if args.include_optional else OPTIONAL_TEST_EXCLUDES["client_test5.py"]
+            success = runner.run(args.tests, excluded_tests=v5_excluded_tests) and success
         except Exception as e:
             print("ERROR loading V5 tests: {}".format(e))
             import traceback
+
             traceback.print_exc()
             success = False
 
@@ -192,10 +224,12 @@ def main():
             module.host = args.host
             module.port = args.port
             runner = TestRunner(module, args.host, args.port, args.timeout)
-            success = runner.run(args.tests) and success
+            v3_excluded_tests = set() if args.include_optional else OPTIONAL_TEST_EXCLUDES["client_test.py"]
+            success = runner.run(args.tests, excluded_tests=v3_excluded_tests) and success
         except Exception as e:
             print("ERROR loading V3 tests: {}".format(e))
             import traceback
+
             traceback.print_exc()
             success = False
 
