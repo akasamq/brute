@@ -159,12 +159,12 @@ sasl_mechanisms:
 check_v310_client_id_length: false
 shared_subscription_mode: Random
 max_allowed_qos: 2
-inflight_timeout: 15
+inflight_timeout: 1
 max_inflight_client: 10
 max_inflight_server: 10
 max_in_mem_pending_messages: 256
 max_in_db_pending_messages: 65536
-min_keep_alive: 10
+min_keep_alive: 0
 max_keep_alive: 65535
 multiple_subscription_id_in_publish: false
 max_session_expiry_interval: 4294967295
