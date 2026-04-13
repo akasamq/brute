@@ -51,7 +51,7 @@ install_rustup() {
     info "rustup already installed."
   else
     info "Downloading and installing rustup..."
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
   fi
 
   source "${HOME}/.cargo/env"
