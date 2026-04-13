@@ -19,17 +19,37 @@ Usage:
 
 Options:
   -h, --help         Show this help
+  --host HOST        MQTT broker hostname (default: localhost)
+  --port PORT        MQTT broker port (default: 1883)
+  --timeout SECONDS  Timeout per test (default: 120)
+
+Environment:
+  PYTHON_BIN         Python binary (default: python3)
 
 Examples:
   bash scripts/test-akasa.sh
+  bash scripts/test-akasa.sh --host 127.0.0.1 --timeout 60
 EOF
 }
+
+HOST="localhost"
+PORT=1883
+TEST_TIMEOUT=120
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help)
       usage
       exit 0
+      ;;
+    --host)
+      HOST="$2"; shift 2
+      ;;
+    --port)
+      PORT="$2"; shift 2
+      ;;
+    --timeout)
+      TEST_TIMEOUT="$2"; shift 2
       ;;
     *)
       echo "Unknown argument: $1" >&2
@@ -56,6 +76,8 @@ if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
   exit 1
 fi
 
+TEST_RUNNER="${SCRIPT_DIR}/test.py"
+
 cleanup() {
   bash "$SETUP_SCRIPT" --stop || true
 }
@@ -65,28 +87,12 @@ trap cleanup EXIT
 echo "==> Setting up Akasa broker..."
 bash "$SETUP_SCRIPT"
 
-if [[ ! -f "${TEST_DIR}/${V5_TEST_SCRIPT}" ]]; then
-  echo "Python test script not found: ${TEST_DIR}/${V5_TEST_SCRIPT}" >&2
+if [[ ! -f "$TEST_RUNNER" ]]; then
+  echo "Test runner not found: $TEST_RUNNER" >&2
   exit 1
 fi
 
-if [[ ! -f "${TEST_DIR}/${V3_TEST_SCRIPT}" ]]; then
-  echo "Python test script not found: ${TEST_DIR}/${V3_TEST_SCRIPT}" >&2
-  exit 1
-fi
+echo "==> Running MQTT compatibility tests (v5 + v3)..."
+echo ""
 
-echo "==> Running MQTT v5 compatibility test: ${V5_TEST_SCRIPT}"
-
-cd "$TEST_DIR"
-v5_rc=0
-v3_rc=0
-
-"$PYTHON_BIN" "$V5_TEST_SCRIPT" || v5_rc=$?
-
-echo "==> Running MQTT v3 compatibility test: ${V3_TEST_SCRIPT}"
-"$PYTHON_BIN" "$V3_TEST_SCRIPT" || v3_rc=$?
-
-if (( v5_rc != 0 || v3_rc != 0 )); then
-  echo "==> Compatibility test failed (v5=${v5_rc}, v3=${v3_rc})" >&2
-  exit 1
-fi
+"$PYTHON_BIN" "$TEST_RUNNER" --host "$HOST" --port "$PORT" --timeout "$TEST_TIMEOUT" || exit $?
